@@ -91,7 +91,7 @@
         </button>
 
         <!-- Main Scoreboard -->
-        <div id="teams-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 w-full max-w-7xl mb-6">
+        <div id="teams-container" class="flex flex-wrap justify-center items-stretch gap-4 w-full max-w-7xl mb-6">
             <!-- Teams will be dynamically inserted here -->
         </div>
 
@@ -243,7 +243,7 @@
 
             const createTeamHTML = (index, color) => {
                 return `
-                    <div id="team-${index}-container" class="team-container rounded-2xl shadow-xl flex flex-col p-6 text-white overflow-hidden" style="background-color: ${color};">
+                    <div id="team-${index}-container" class="team-container w-full sm:w-[350px] rounded-2xl shadow-xl flex flex-col p-6 text-white overflow-hidden" style="background-color: ${color};">
                         <div class="flex items-center gap-2">
                             <input type="text" id="team-${index}-name" class="flex-grow text-3xl font-bold bg-transparent border-none text-center focus:ring-2 focus:ring-white/50 rounded-lg p-2" value="Team ${index + 1}">
                             <input type="color" id="team-${index}-color" value="${color}" title="Change team color">
@@ -570,5 +570,6 @@
     </script>
 </body>
 </html>
+
 
 
