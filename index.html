@@ -244,8 +244,9 @@
             const createTeamHTML = (index, color) => {
                 return `
                     <div id="team-${index}-container" class="team-container w-full sm:w-[350px] rounded-2xl shadow-xl flex flex-col p-6 text-white overflow-hidden" style="background-color: ${color};">
-                        <div class="flex items-center gap-2">
-                            <input type="text" id="team-${index}-name" class="flex-grow text-3xl font-bold bg-transparent border-none text-center focus:ring-2 focus:ring-white/50 rounded-lg p-2" value="Team ${index + 1}">
+                        <div class="grid grid-cols-[32px_1fr_32px] items-center gap-2">
+                            <div></div> <!-- Spacer for centering -->
+                            <input type="text" id="team-${index}-name" class="w-full text-3xl font-bold bg-transparent border-none text-center focus:ring-2 focus:ring-white/50 rounded-lg p-2" value="Team ${index + 1}">
                             <input type="color" id="team-${index}-color" value="${color}" title="Change team color">
                         </div>
                         <div class="flex-grow flex flex-col items-center justify-center my-4">
@@ -570,6 +571,7 @@
     </script>
 </body>
 </html>
+
 
 
 
