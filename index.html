@@ -579,7 +579,7 @@
             emojiGrid.addEventListener('click', (e) => {
                 const button = e.target.closest('.emoji-button');
                 if (button && teamIndexToUpdate !== null) {
-                    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">${button.textContent.trim()}</text></svg>`;
+                    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x="50" y="50" dominant-baseline="middle" text-anchor="middle" font-size="80">${button.textContent.trim()}</text></svg>`;
                     teams[teamIndexToUpdate].logoImg.src = `data:image/svg+xml,${encodeURIComponent(svg)}`;
                     saveState();
                     closeEmojiLibrary();
@@ -628,5 +628,6 @@
     </script>
 </body>
 </html>
+
 
 
