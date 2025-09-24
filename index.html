@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Classroom Scoreboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
     <style>
         body {
@@ -74,6 +75,15 @@
             font-size: 3rem;
             line-height: 1;
         }
+        #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 55; /* Above modal backdrop, below modal content */
+            pointer-events: none; /* Allows clicks to pass through */
+        }
     </style>
 </head>
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
@@ -116,7 +126,8 @@
         
         <!-- Winner Modal -->
         <div id="winner-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div class="bg-white dark:bg-gray-800 p-10 rounded-2xl shadow-2xl text-center winner-banner">
+            <canvas id="confetti-canvas"></canvas>
+            <div class="relative bg-white dark:bg-gray-800 p-10 rounded-2xl shadow-2xl text-center winner-banner z-[60]">
                 <h2 id="winner-text" class="text-5xl font-black mb-4"></h2>
                 <p class="text-xl text-gray-600 dark:text-gray-300 mb-6">Congratulations!</p>
                 <button id="new-game-button" class="control-button bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-lg text-lg">New Game</button>
@@ -172,6 +183,7 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Elements ---
             const teamsContainer = document.getElementById('teams-container');
             const teamCountInput = document.getElementById('team-count');
             const pointIncrementInput = document.getElementById('point-increment');
@@ -191,8 +203,7 @@
             const loadUrlButton = document.getElementById('load-url-button');
             const uploadFileButton = document.getElementById('upload-file-button');
             const searchGoogleButton = document.getElementById('search-google-button');
-            let teamIndexToUpdate = null;
-
+            
             const iconLibraryModal = document.getElementById('icon-library-modal');
             const closeIconLibraryModalButton = document.getElementById('close-icon-library-modal');
             const openIconLibraryButton = document.getElementById('open-icon-library-button');
@@ -203,7 +214,36 @@
             const openEmojiLibraryButton = document.getElementById('open-emoji-library-button');
             const emojiGrid = document.getElementById('emoji-grid');
 
+            // --- Confetti Elements & State ---
+            const confettiCanvas = document.getElementById('confetti-canvas');
+            const confettiCtx = confettiCanvas.getContext('2d');
+            let confettiParticles = [];
+            let confettiAnimationId;
+
+            // --- Sound Effects ---
+            let soundsReady = false;
+            let pointSound;
+            let winnerSound;
+            
+            // Start audio context and initialize sounds on first user interaction
+            document.body.addEventListener('click', async () => {
+                if (!soundsReady && typeof Tone !== 'undefined') {
+                    try {
+                        await Tone.start();
+                        pointSound = new Tone.Synth({ oscillator: { type: "sine" }, envelope: { attack: 0.005, decay: 0.1, sustain: 0.3, release: 0.1 } }).toDestination();
+                        winnerSound = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "triangle" }, envelope: { attack: 0.005, decay: 0.1, sustain: 0.3, release: 1 } }).toDestination();
+                        soundsReady = true;
+                        console.log('Audio context started and sounds initialized.');
+                    } catch (e) {
+                        console.error("Could not initialize audio:", e);
+                    }
+                }
+            }, { once: true });
+
+
+            // --- App State ---
             let teams = [];
+            let teamIndexToUpdate = null;
             const defaultColors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#6366F1', '#D946EF'];
 
             const mascots = [
@@ -239,8 +279,9 @@
                 { name: 'Warrior', svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM11 7h2v6h-2zm0 8h2v2h-2z"/></svg>'}
             ];
 
-            const emojiList = ['😀', '😎', '😂', '🥳', '🤩', '🚀', '⚡️', '🔥', '⭐️', '🏆', '💯', '🎯', '🏀', '🏈', '⚽️', '⚾️', '🍎', '💡', '📚', '✏️', '👑', '👽', '🤖', '👻', '🐙', '🦋', '🦄', '🦖', '🐳', '✔️'];
+            const emojiList = ['😀', '😎', '😂', '🥳', '🤩', '🚀', '⚡️', '🔥', '⭐️', '🏆', '💯', '🎯', '🏀', '🏈', '⚽️', '⚾️', '🍎', '💡', '📚', '✏️', '👑', '👽', '🤖', '👻', '🐙', '🦋', '🦄', '🦖', '🐳', '✔️', '🐅', '🐆', '🐻', '🐈', '🐕', '🐘', '🦘', '🦁', '🐺', '🦅', '🐎', '🐶', '🐏', '🦈', '🐬', '🦊', '🦍', '🦏', '🦉', '🐝', '🐊', '🐉'];
 
+            // --- Core Functions ---
             const createTeamHTML = (index, color) => {
                 return `
                     <div id="team-${index}-container" class="team-container w-full sm:w-[350px] rounded-2xl shadow-xl flex flex-col p-6 text-white overflow-hidden" style="background-color: ${color};">
@@ -303,8 +344,14 @@
                 const increment = parseInt(pointIncrementInput.value) || 1;
                 team.score = Math.max(0, team.score + (increment * direction));
                 team.scoreDisplay.textContent = team.score;
-                team.scoreDisplay.style.transform = 'scale(1.1)';
-                setTimeout(() => { team.scoreDisplay.style.transform = 'scale(1)'; }, 150);
+                
+                // Animate and play sound on score increase
+                if(direction > 0) {
+                    team.scoreDisplay.style.transform = 'scale(1.1)';
+                    setTimeout(() => { team.scoreDisplay.style.transform = 'scale(1)'; }, 150);
+                    if (soundsReady) pointSound.triggerAttackRelease("C5", "8n", Tone.now());
+                }
+                
                 checkForWinner();
                 saveState();
             };
@@ -321,33 +368,16 @@
                 logoModal.classList.remove('hidden');
             };
 
-            const closeLogoModal = () => {
-                logoModal.classList.add('hidden');
-            };
-            
-            const openIconLibrary = () => {
-                iconLibraryModal.classList.remove('hidden');
-            };
-
-            const closeIconLibrary = () => {
-                iconLibraryModal.classList.add('hidden');
-            };
-
-            const openEmojiLibrary = () => {
-                emojiLibraryModal.classList.remove('hidden');
-            };
-
-            const closeEmojiLibrary = () => {
-                emojiLibraryModal.classList.add('hidden');
-            };
-
+            const closeLogoModal = () => logoModal.classList.add('hidden');
+            const openIconLibrary = () => iconLibraryModal.classList.remove('hidden');
+            const closeIconLibrary = () => iconLibraryModal.classList.add('hidden');
+            const openEmojiLibrary = () => emojiLibraryModal.classList.remove('hidden');
+            const closeEmojiLibrary = () => emojiLibraryModal.classList.add('hidden');
 
             const handleGoogleSearch = () => {
                 if (teamIndexToUpdate !== null) {
                     const teamName = teams[teamIndexToUpdate].nameInput.value;
-                    const searchTerm = encodeURIComponent(teamName);
-                    const searchUrl = `https://www.google.com/search?q=${searchTerm}&tbm=isch`;
-                    window.open(searchUrl, '_blank');
+                    window.open(`https://www.google.com/search?q=${encodeURIComponent(teamName)}&tbm=isch`, '_blank');
                 }
             };
 
@@ -356,8 +386,8 @@
                 if (url && teamIndexToUpdate !== null) {
                     const team = teams[teamIndexToUpdate];
                     team.logoImg.src = url;
-                    const originalColor = team.colorInput.value.substring(1);
                     team.logoImg.onerror = () => {
+                        const originalColor = team.colorInput.value.substring(1);
                         team.logoImg.src = `https://placehold.co/128x128/${originalColor}/FFFFFF?text=Error`;
                     };
                     saveState();
@@ -366,13 +396,11 @@
             };
 
             const handleLogoChange = (teamIndex) => {
-                const team = teams[teamIndex];
-                const file = team.logoInput.files[0];
+                const file = teams[teamIndex].logoInput.files[0];
                 if (file) {
                     const reader = new FileReader();
                     reader.onload = (e) => {
-                        const imageData = e.target.result;
-                        team.logoImg.src = imageData;
+                        teams[teamIndex].logoImg.src = e.target.result;
                         saveState();
                         closeLogoModal();
                     };
@@ -386,7 +414,6 @@
                     team.scoreDisplay.textContent = 0;
                 });
                 if(fullReset) {
-                    localStorage.removeItem('scoreboardState');
                     localStorage.clear();
                     location.reload();
                 } else {
@@ -402,31 +429,91 @@
                 if (winner) {
                     winnerText.textContent = `${winner.nameInput.value} Wins!`;
                     winnerModal.classList.remove('hidden');
+                    startConfetti();
+                    if (soundsReady) winnerSound.triggerAttackRelease(["C4", "E4", "G4", "C5"], "1s", Tone.now());
                 }
             };
 
             const startNewGame = () => {
                 resetScores();
                 winnerModal.classList.add('hidden');
+                stopConfetti();
             };
 
+            // --- Confetti Functions ---
+            const setupConfettiCanvas = () => {
+                confettiCanvas.width = window.innerWidth;
+                confettiCanvas.height = window.innerHeight;
+            }
+
+            const startConfetti = () => {
+                confettiParticles = [];
+                const particleCount = 200;
+                const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
+                for (let i = 0; i < particleCount; i++) {
+                    confettiParticles.push({
+                        x: Math.random() * confettiCanvas.width,
+                        y: Math.random() * confettiCanvas.height - confettiCanvas.height,
+                        color: colors[Math.floor(Math.random() * colors.length)],
+                        radius: Math.random() * 5 + 2,
+                        speed: Math.random() * 3 + 2,
+                        angle: Math.random() * Math.PI * 2,
+                        tilt: Math.random() * 10
+                    });
+                }
+                if(confettiAnimationId) cancelAnimationFrame(confettiAnimationId);
+                animateConfetti();
+            };
+
+            const animateConfetti = () => {
+                confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+                confettiParticles.forEach((p, i) => {
+                    p.y += p.speed;
+                    p.x += Math.sin(p.y / p.tilt) * 2;
+                    if (p.y > confettiCanvas.height) {
+                         p.x = Math.random() * confettiCanvas.width;
+                         p.y = -10;
+                    }
+                    confettiCtx.beginPath();
+                    confettiCtx.fillStyle = p.color;
+                    confettiCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                    confettiCtx.fill();
+                });
+                confettiAnimationId = requestAnimationFrame(animateConfetti);
+            };
+
+            const stopConfetti = () => {
+                cancelAnimationFrame(confettiAnimationId);
+                confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+            };
+
+            // --- State Management ---
             const saveState = () => {
-                const state = {
-                    teamCount: teams.length,
-                    teamsData: teams.map(team => ({
-                        name: team.nameInput.value,
-                        score: team.score,
-                        color: team.colorInput.value,
-                        logoSrc: team.logoImg.src
-                    })),
-                    winningScore: winningScoreInput.value,
-                    pointIncrement: pointIncrementInput.value
-                };
-                localStorage.setItem('scoreboardState', JSON.stringify(state));
+                try {
+                    const state = {
+                        teamCount: teams.length,
+                        teamsData: teams.map(team => ({
+                            name: team.nameInput.value,
+                            score: team.score,
+                            color: team.colorInput.value,
+                            logoSrc: team.logoImg.src
+                        })),
+                        winningScore: winningScoreInput.value,
+                        pointIncrement: pointIncrementInput.value
+                    };
+                    localStorage.setItem('scoreboardState', JSON.stringify(state));
+                } catch (e) {
+                    console.error("Could not save state:", e);
+                }
             };
 
             const loadState = () => {
-                const state = JSON.parse(localStorage.getItem('scoreboardState'));
+                const stateJSON = localStorage.getItem('scoreboardState');
+                if (!stateJSON) {
+                     generateAndSetupTeams(parseInt(teamCountInput.value));
+                     return;
+                }
+                const state = JSON.parse(stateJSON);
                 if (state && state.teamCount > 0) {
                     teamCountInput.value = state.teamCount;
                     pointIncrementInput.value = state.pointIncrement || 1;
@@ -441,9 +528,7 @@
                             teams[i].scoreDisplay.textContent = data.score;
                             teams[i].colorInput.value = data.color;
                             teams[i].container.style.backgroundColor = data.color;
-                            if (data.logoSrc) {
-                                teams[i].logoImg.src = data.logoSrc;
-                            }
+                            if (data.logoSrc) teams[i].logoImg.src = data.logoSrc;
                         }
                     });
                 } else {
@@ -453,21 +538,16 @@
             
             const toggleFullscreen = () => {
                 if (!document.fullscreenElement) {
-                    document.documentElement.requestFullscreen().catch((err) => {
-                        console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
-                    });
+                    document.documentElement.requestFullscreen().catch(err => console.error(err));
                 } else if (document.exitFullscreen) {
                     document.exitFullscreen();
                 }
             };
 
-            // --- Event Listeners ---
+            // --- Event Listeners Setup ---
             updateTeamsButton.addEventListener('click', () => {
-                const newCount = parseInt(teamCountInput.value);
-                if (newCount > 0 && newCount <= 8) {
-                    generateAndSetupTeams(newCount);
-                    saveState();
-                }
+                generateAndSetupTeams(parseInt(teamCountInput.value));
+                saveState();
             });
             resetButton.addEventListener('click', () => resetScores(false));
             newGameButton.addEventListener('click', startNewGame);
@@ -475,103 +555,78 @@
             pointIncrementInput.addEventListener('input', saveState);
             fullscreenButton.addEventListener('click', toggleFullscreen);
 
-            // Logo modal listeners
             closeLogoModalButton.addEventListener('click', closeLogoModal);
             loadUrlButton.addEventListener('click', handleLogoUrl);
             searchGoogleButton.addEventListener('click', handleGoogleSearch);
             uploadFileButton.addEventListener('click', () => {
-                if(teamIndexToUpdate !== null) {
-                    teams[teamIndexToUpdate].logoInput.click();
-                }
+                if(teamIndexToUpdate !== null) teams[teamIndexToUpdate].logoInput.click();
             });
 
-            // Icon Library listeners
             openIconLibraryButton.addEventListener('click', openIconLibrary);
             closeIconLibraryModalButton.addEventListener('click', closeIconLibrary);
-            
             iconGrid.addEventListener('click', (e) => {
                 const button = e.target.closest('.mascot-icon-button');
-                if (button) {
-                    const url = button.dataset.url;
-                    if (url && teamIndexToUpdate !== null) {
-                        const team = teams[teamIndexToUpdate];
-                        team.logoImg.src = url;
-                        team.logoImg.onerror = () => {
-                            const originalColor = team.colorInput.value.substring(1);
-                            team.logoImg.src = `https://placehold.co/128x128/${originalColor}/FFFFFF?text=Error`;
-                        };
-                        saveState();
-                        closeIconLibrary();
-                        closeLogoModal();
-                    }
+                if (button && teamIndexToUpdate !== null) {
+                    teams[teamIndexToUpdate].logoImg.src = button.dataset.url;
+                    saveState();
+                    closeIconLibrary();
+                    closeLogoModal();
                 }
             });
 
-            // Emoji Library Listeners
             openEmojiLibraryButton.addEventListener('click', openEmojiLibrary);
             closeEmojiLibraryModalButton.addEventListener('click', closeEmojiLibrary);
             emojiGrid.addEventListener('click', (e) => {
                 const button = e.target.closest('.emoji-button');
                 if (button && teamIndexToUpdate !== null) {
-                    const emoji = button.textContent.trim();
-                    // Create an SVG data URL for the emoji, which is more reliable than canvas
-                    const svg = `
-                        <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-                            <text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" font-size="100">${emoji}</text>
-                        </svg>
-                    `;
-                    const dataUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-                    
-                    const team = teams[teamIndexToUpdate];
-                    team.logoImg.src = dataUrl;
+                    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">${button.textContent.trim()}</text></svg>`;
+                    teams[teamIndexToUpdate].logoImg.src = `data:image/svg+xml,${encodeURIComponent(svg)}`;
                     saveState();
                     closeEmojiLibrary();
                     closeLogoModal();
                 }
             });
 
-
             document.addEventListener('fullscreenchange', () => {
                 const isFullscreen = !!document.fullscreenElement;
                 fullscreenIconOpen.classList.toggle('hidden', isFullscreen);
                 fullscreenIconClose.classList.toggle('hidden', !isFullscreen);
             });
+            
+            window.addEventListener('resize', setupConfettiCanvas);
 
             // --- Initial Load ---
             const populateIconLibrary = () => {
                  iconGrid.innerHTML = ''; 
                  mascots.forEach(mascot => {
                     const svgDataUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(mascot.svg)}`;
-                    const iconHTML = `
+                    iconGrid.innerHTML += `
                         <button class="mascot-icon-button flex flex-col items-center justify-center p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" data-url="${svgDataUrl}">
                             <img src="${svgDataUrl}" alt="${mascot.name}" class="w-16 h-16 object-contain pointer-events-none">
                             <span class="mt-2 text-sm font-semibold pointer-events-none">${mascot.name}</span>
                         </button>
                     `;
-                    iconGrid.innerHTML += iconHTML;
                 });
             };
 
             const populateEmojiLibrary = () => {
                 emojiGrid.innerHTML = '';
                 emojiList.forEach(emoji => {
-                    const emojiHTML = `
+                    emojiGrid.innerHTML += `
                         <button class="emoji-button flex items-center justify-center p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
                             ${emoji}
                         </button>
                     `;
-                    emojiGrid.innerHTML += emojiHTML;
                 });
             };
 
             populateIconLibrary();
             populateEmojiLibrary();
+            setupConfettiCanvas();
             loadState();
         });
     </script>
 </body>
 </html>
-
-
 
 
